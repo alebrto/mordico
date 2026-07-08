@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { PARAMETROS, formatCOP } from '../lib/financials'
-import { AlertTriangle, TrendingUp, Wallet, Package2 } from 'lucide-react'
+import { AlertTriangle, Wallet, Receipt } from 'lucide-react'
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
@@ -11,6 +11,7 @@ export default function Resumen() {
   const [ventasHoy, setVentasHoy] = useState([])
   const [gastosHoy, setGastosHoy] = useState([])
   const [clientesDeuda, setClientesDeuda] = useState([])
+  const [porCobrarTotal, setPorCobrarTotal] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -23,8 +24,9 @@ export default function Resumen() {
 
     const { data: ventas } = await supabase
       .from('ventas')
-      .select('*')
+      .select('*, clientes(nombre)')
       .eq('fecha', hoy)
+      .order('created_at', { ascending: false })
 
     const { data: gastos } = await supabase
       .from('gastos')
@@ -38,9 +40,14 @@ export default function Resumen() {
       .order('saldo', { ascending: false })
       .limit(5)
 
+    // Cartera total: TODO lo que hay pendiente por cobrar en la historia
+    // completa, no solo lo de hoy.
+    const { data: todasLasDeudas } = await supabase.from('ventas').select('saldo').gt('saldo', 0)
+
     setVentasHoy(ventas || [])
     setGastosHoy(gastos || [])
     setClientesDeuda(deudores || [])
+    setPorCobrarTotal((todasLasDeudas || []).reduce((acc, v) => acc + v.saldo, 0))
     setLoading(false)
   }
 
@@ -69,7 +76,17 @@ export default function Resumen() {
         />
         <Tarjeta titulo="Ingresos hoy" valor={formatCOP(ingresosHoy)} />
         <Tarjeta titulo="Pagado hoy" valor={formatCOP(pagadoHoy)} />
-        <Tarjeta titulo="Por cobrar hoy" valor={formatCOP(porCobrarHoy)} negativo />
+        <Tarjeta titulo="Gastos de hoy" valor={formatCOP(gastosDelDia)} negativo={gastosDelDia > 0} />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Tarjeta titulo="Por cobrar hoy" valor={formatCOP(porCobrarHoy)} negativo subtitulo="Solo ventas de hoy" />
+        <Tarjeta
+          titulo="Por cobrar acumulado (total)"
+          valor={formatCOP(porCobrarTotal)}
+          negativo={porCobrarTotal > 0}
+          subtitulo="Toda la cartera histórica"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -113,6 +130,67 @@ export default function Resumen() {
           </p>
           <p className="text-xs text-gray-400">Pagado hoy − gastos del día</p>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <Receipt size={18} className="text-mordisco" />
+          <h2 className="font-bold text-gray-900">Ventas de hoy por cliente</h2>
+        </div>
+        {loading ? (
+          <p className="text-sm text-gray-400">Cargando…</p>
+        ) : ventasHoy.length === 0 ? (
+          <p className="text-sm text-gray-400">Todavía no se ha registrado ninguna venta hoy.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-100">
+                  <th className="py-2 pr-4">Cliente</th>
+                  <th className="py-2 pr-4">Cantidad</th>
+                  <th className="py-2 pr-4">Total</th>
+                  <th className="py-2 pr-4">Abonado</th>
+                  <th className="py-2 pr-4">Saldo</th>
+                  <th className="py-2 pr-4">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventasHoy.map((v) => (
+                  <tr key={v.id} className="border-b border-gray-50 last:border-0">
+                    <td className="py-2 pr-4 font-medium text-gray-800">{v.clientes?.nombre || '—'}</td>
+                    <td className="py-2 pr-4">{v.cantidad}</td>
+                    <td className="py-2 pr-4">{formatCOP(v.total)}</td>
+                    <td className="py-2 pr-4">{formatCOP(v.abonado)}</td>
+                    <td className="py-2 pr-4 font-semibold">{formatCOP(v.saldo)}</td>
+                    <td className="py-2 pr-4">
+                      <span
+                        className={`badge ${
+                          v.estado === 'Pagado'
+                            ? 'bg-green-100 text-green-700'
+                            : v.estado === 'Abono parcial'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {v.estado}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-200 font-bold text-gray-900">
+                  <td className="py-2 pr-4">Total del día</td>
+                  <td className="py-2 pr-4">{empanadasVendidasHoy}</td>
+                  <td className="py-2 pr-4">{formatCOP(ingresosHoy)}</td>
+                  <td className="py-2 pr-4">{formatCOP(pagadoHoy)}</td>
+                  <td className="py-2 pr-4">{formatCOP(porCobrarHoy)}</td>
+                  <td className="py-2 pr-4"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card">

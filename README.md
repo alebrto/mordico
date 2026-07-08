@@ -149,6 +149,19 @@ código), se recomienda crear una tabla `parametros` en Supabase y adaptar
 `financials.js` para leerla; el esquema actual no la incluye para mantener el
 setup inicial simple.
 
+**Importante sobre el punto de equilibrio:** se calcula con los **gastos
+fijos reales** que registras en la vista Gastos (tipo = "Fijo") durante el
+mes en curso, dividido entre el margen unitario. NO usa los valores de
+`PARAMETROS` como gasto fijo — esos solo sirven de referencia inicial. Si
+registras un gasto fijo grande (ej. una compra grande de insumos marcada
+como "Fijo"), el punto de equilibrio del Dashboard financiero se recalcula
+de inmediato.
+
+**Logo del reporte PDF:** en la vista Reportes puedes subir una imagen que se
+guarda en el navegador (localStorage) y se incrusta automáticamente en cada
+PDF que exportes. Si cambias de computador o navegador, deberás volver a
+subirla.
+
 ## 8. Estructura del proyecto
 
 ```

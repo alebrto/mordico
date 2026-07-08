@@ -54,7 +54,13 @@ export default function DashboardFinanciero() {
   const carteraAcumulada = ventas.reduce((a, v) => a + v.saldo, 0)
   const diasTranscurridos = new Date().getDate()
   const promedioDiario = diasTranscurridos > 0 ? totalEmpanadasMes / diasTranscurridos : 0
-  const liquidez = totalCobradoMes - gastos.reduce((a, g) => a + g.valor, 0)
+
+  // Gastos REALES del mes, tomados de lo que el usuario registró en la vista Gastos.
+  const gastosFijosMes = gastos.filter((g) => g.tipo === 'Fijo').reduce((a, g) => a + g.valor, 0)
+  const gastosVariablesMes = gastos.filter((g) => g.tipo === 'Variable').reduce((a, g) => a + g.valor, 0)
+  const gastosTotalesMes = gastosFijosMes + gastosVariablesMes
+
+  const liquidez = totalCobradoMes - gastosTotalesMes
 
   const empanadasPorDia = {}
   ventas.forEach((v) => {
@@ -81,15 +87,20 @@ export default function DashboardFinanciero() {
   })
   const dataGastosPorCategoria = Object.entries(gastosPorCategoria).map(([name, value]) => ({ name, value }))
 
-  const puntoEquilibrio = puntoDeEquilibrio()
+  const puntoEquilibrio = puntoDeEquilibrio(gastosFijosMes)
   const margenBruto = margenBrutoPorcentaje()
   const proyeccion = proyeccionMensual(promedioDiario)
+  const empanadasFaltantesEquilibrio = Math.max(0, puntoEquilibrio - totalEmpanadasMes)
 
   const contextoIA = {
     totalEmpanadasMes,
     totalCobradoMes,
     carteraAcumulada,
+    gastosFijosMes,
+    gastosVariablesMes,
+    gastosTotalesMes,
     puntoEquilibrio,
+    empanadasFaltantesEquilibrio,
     margenBruto,
     proyeccion,
     liquidez,
@@ -101,10 +112,20 @@ export default function DashboardFinanciero() {
       <h1 className="text-2xl font-extrabold text-gray-900">Dashboard financiero</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Indicador titulo="Punto de equilibrio" valor={`${puntoEquilibrio.toLocaleString('es-CO')}`} subtitulo="empanadas/mes" />
+        <Indicador
+          titulo="Punto de equilibrio"
+          valor={`${puntoEquilibrio.toLocaleString('es-CO')}`}
+          subtitulo={`empanadas/mes · gastos fijos: ${formatCOP(gastosFijosMes)}`}
+        />
+        <Indicador
+          titulo="Faltan para el equilibrio"
+          valor={`${empanadasFaltantesEquilibrio.toLocaleString('es-CO')}`}
+          subtitulo="empanadas este mes"
+        />
         <Indicador titulo="Margen bruto" valor={`${margenBruto.toFixed(0)}%`} />
         <Indicador titulo="Liquidez" valor={formatCOP(liquidez)} />
         <Indicador titulo="Proyección mensual" valor={`${proyeccion.toLocaleString('es-CO')}`} subtitulo="empanadas" />
+        <Indicador titulo="Gastos totales del mes" valor={formatCOP(gastosTotalesMes)} subtitulo={`fijos ${formatCOP(gastosFijosMes)} · variables ${formatCOP(gastosVariablesMes)}`} />
       </div>
 
       {loading ? (

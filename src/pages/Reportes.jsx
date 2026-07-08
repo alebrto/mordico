@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { formatCOP } from '../lib/financials'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { ImagePlus, X } from 'lucide-react'
+
+const LOGO_STORAGE_KEY = 'mordisco_logo_pdf_base64'
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
@@ -13,25 +16,58 @@ function firstOfMonthISO() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
 }
 
+// Lunes de la semana actual (semana de lunes a domingo)
+function lunesDeEstaSemanaISO() {
+  const d = new Date()
+  const dia = d.getDay() // 0 = domingo, 1 = lunes, ...
+  const diff = dia === 0 ? -6 : 1 - dia
+  const lunes = new Date(d)
+  lunes.setDate(d.getDate() + diff)
+  return lunes.toISOString().slice(0, 10)
+}
+
 export default function Reportes() {
   const [desde, setDesde] = useState(firstOfMonthISO())
   const [hasta, setHasta] = useState(todayISO())
   const [reporte, setReporte] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [logo, setLogo] = useState(null)
 
-  async function generarReporte() {
+  useEffect(() => {
+    const guardado = localStorage.getItem(LOGO_STORAGE_KEY)
+    if (guardado) setLogo(guardado)
+  }, [])
+
+  function seleccionarLogo(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64 = reader.result
+      setLogo(base64)
+      localStorage.setItem(LOGO_STORAGE_KEY, base64)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function quitarLogo() {
+    setLogo(null)
+    localStorage.removeItem(LOGO_STORAGE_KEY)
+  }
+
+  async function generarReporte(desdeParam = desde, hastaParam = hasta) {
     setLoading(true)
     const { data: ventas } = await supabase
       .from('ventas')
       .select('*, clientes(nombre)')
-      .gte('fecha', desde)
-      .lte('fecha', hasta)
+      .gte('fecha', desdeParam)
+      .lte('fecha', hastaParam)
 
     const { data: gastos } = await supabase
       .from('gastos')
       .select('*')
-      .gte('fecha', desde)
-      .lte('fecha', hasta)
+      .gte('fecha', desdeParam)
+      .lte('fecha', hastaParam)
 
     const v = ventas || []
     const g = gastos || []
@@ -66,19 +102,37 @@ export default function Reportes() {
     setLoading(false)
   }
 
+  function usarEstaSemana() {
+    const nuevoDesde = lunesDeEstaSemanaISO()
+    const nuevoHasta = todayISO()
+    setDesde(nuevoDesde)
+    setHasta(nuevoHasta)
+    generarReporte(nuevoDesde, nuevoHasta)
+  }
+
   function exportarPDF() {
     if (!reporte) return
     const doc = new jsPDF()
+    let cursorY = 18
+
+    if (logo) {
+      try {
+        doc.addImage(logo, 'PNG', 14, 10, 22, 22)
+        cursorY = 40
+      } catch {
+        cursorY = 18
+      }
+    }
 
     doc.setFontSize(18)
     doc.setTextColor(196, 111, 43)
-    doc.text('Mordisco – Reporte de ventas', 14, 18)
+    doc.text('Mordisco – Reporte de ventas', logo ? 42 : 14, logo ? 20 : 18)
     doc.setFontSize(10)
     doc.setTextColor(100)
-    doc.text(`Periodo: ${desde} a ${hasta}`, 14, 25)
+    doc.text(`Periodo: ${desde} a ${hasta}`, logo ? 42 : 14, logo ? 27 : 25)
 
     autoTable(doc, {
-      startY: 32,
+      startY: cursorY,
       head: [['Indicador', 'Valor']],
       body: [
         ['Total empanadas', String(reporte.totalEmpanadas)],
@@ -117,23 +171,50 @@ export default function Reportes() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-extrabold text-gray-900">Reportes</h1>
 
-      <div className="card flex flex-col sm:flex-row sm:items-end gap-4">
-        <div>
-          <label className="label-field">Desde</label>
-          <input type="date" className="input-field" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        </div>
-        <div>
-          <label className="label-field">Hasta</label>
-          <input type="date" className="input-field" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        </div>
-        <button onClick={generarReporte} disabled={loading} className="btn-primary">
-          {loading ? 'Generando…' : 'Generar reporte'}
-        </button>
-        {reporte && (
-          <button onClick={exportarPDF} className="btn-secondary">
-            Exportar a PDF
+      <div className="card flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4 flex-wrap">
+          <div>
+            <label className="label-field">Desde</label>
+            <input type="date" className="input-field" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <div>
+            <label className="label-field">Hasta</label>
+            <input type="date" className="input-field" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+          <button onClick={() => generarReporte()} disabled={loading} className="btn-primary">
+            {loading ? 'Generando…' : 'Generar reporte'}
           </button>
-        )}
+          <button onClick={usarEstaSemana} disabled={loading} className="btn-secondary">
+            Esta semana
+          </button>
+          {reporte && (
+            <button onClick={exportarPDF} className="btn-secondary">
+              Exportar a PDF
+            </button>
+          )}
+        </div>
+
+        <div className="pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap">
+          <p className="label-field !mb-0">Logo para el PDF</p>
+          {logo ? (
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-gray-200" />
+              <label className="btn-secondary cursor-pointer text-xs">
+                Cambiar
+                <input type="file" accept="image/*" className="hidden" onChange={seleccionarLogo} />
+              </label>
+              <button onClick={quitarLogo} className="text-gray-400 hover:text-red-500">
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <label className="btn-secondary cursor-pointer flex items-center gap-2 text-xs">
+              <ImagePlus size={15} /> Subir logo
+              <input type="file" accept="image/*" className="hidden" onChange={seleccionarLogo} />
+            </label>
+          )}
+          <p className="text-xs text-gray-400">Se guarda en este navegador y se usa en todos los reportes que exportes.</p>
+        </div>
       </div>
 
       {reporte && (

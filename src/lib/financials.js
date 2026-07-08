@@ -13,13 +13,22 @@ export const PARAMETROS = {
   metaDiariaEmpanadas: 280,
 }
 
-export function gastosFijosMensuales(p = PARAMETROS) {
+// Valor de referencia (solo informativo/plantilla inicial). El cálculo real
+// del negocio SIEMPRE debe usar los gastos que el usuario registra en la
+// vista "Gastos" (tabla `gastos`, tipo = 'Fijo'), no este valor fijo.
+export function gastosFijosMensualesReferencia(p = PARAMETROS) {
   return p.arriendo + p.luzYAseo + p.gas + p.gasolina + p.inversionista + p.reserva
 }
 
-// Punto de equilibrio en unidades = Gastos fijos / Margen unitario
-export function puntoDeEquilibrio(p = PARAMETROS) {
-  const fijos = gastosFijosMensuales(p)
+// Punto de equilibrio en unidades = Gastos fijos REALES del mes / Margen unitario.
+// `gastosFijosMesReal` debe venir de sumar los gastos con tipo='Fijo'
+// registrados en la tabla `gastos` para el mes en curso. Si no se pasa nada,
+// cae de vuelta al valor de referencia de PARAMETROS (solo para no romper
+// pantallas que aún no cargan los gastos reales).
+export function puntoDeEquilibrio(gastosFijosMesReal, p = PARAMETROS) {
+  const fijos =
+    typeof gastosFijosMesReal === 'number' ? gastosFijosMesReal : gastosFijosMensualesReferencia(p)
+  if (!p.margenUnitario) return 0
   return Math.ceil(fijos / p.margenUnitario)
 }
 
@@ -32,9 +41,9 @@ export function utilidadBruta(totalEmpanadasVendidas, p = PARAMETROS) {
   return totalEmpanadasVendidas * p.margenUnitario
 }
 
-// Utilidad neta = utilidad bruta - gastos fijos - gastos variables extra registrados
-export function utilidadNeta(totalEmpanadasVendidas, gastosVariablesExtra = 0, p = PARAMETROS) {
-  return utilidadBruta(totalEmpanadasVendidas, p) - gastosFijosMensuales(p) - gastosVariablesExtra
+// Utilidad neta = utilidad bruta - gastos fijos reales del mes - gastos variables reales del mes
+export function utilidadNeta(totalEmpanadasVendidas, gastosFijosMesReal = 0, gastosVariablesMesReal = 0, p = PARAMETROS) {
+  return utilidadBruta(totalEmpanadasVendidas, p) - gastosFijosMesReal - gastosVariablesMesReal
 }
 
 // Proyección de cierre de mes según ritmo de ventas diario promedio

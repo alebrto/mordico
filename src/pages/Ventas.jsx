@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { PARAMETROS, formatCOP, estadoVenta } from '../lib/financials'
+import ClienteBuscador from '../components/ClienteBuscador'
+import { Pencil, Trash2, X } from 'lucide-react'
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
+}
+
+const FORM_VACIO = {
+  cliente_id: '',
+  fecha: todayISO(),
+  cantidad: '',
+  precio_unitario: PARAMETROS.precioEmpanada,
+  registrarAbono: false,
+  valorAbonado: '',
 }
 
 export default function Ventas() {
@@ -13,14 +24,11 @@ export default function Ventas() {
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
 
-  const [form, setForm] = useState({
-    cliente_id: '',
-    fecha: todayISO(),
-    cantidad: '',
-    precio_unitario: PARAMETROS.precioEmpanada,
-    registrarAbono: false,
-    valorAbonado: '',
-  })
+  const [form, setForm] = useState(FORM_VACIO)
+
+  // Edición de una venta existente
+  const [modalEditar, setModalEditar] = useState(null)
+  const [formEdit, setFormEdit] = useState(null)
 
   useEffect(() => {
     cargar()
@@ -64,18 +72,65 @@ export default function Ventas() {
 
     setGuardando(false)
     if (!error) {
-      setForm({
-        cliente_id: '',
-        fecha: todayISO(),
-        cantidad: '',
-        precio_unitario: PARAMETROS.precioEmpanada,
-        registrarAbono: false,
-        valorAbonado: '',
-      })
+      setForm({ ...FORM_VACIO, fecha: todayISO() })
       cargar()
     } else {
       alert('Error al guardar la venta: ' + error.message)
     }
+  }
+
+  function abrirEditar(venta) {
+    setModalEditar(venta)
+    setFormEdit({
+      cliente_id: venta.cliente_id || '',
+      fecha: venta.fecha,
+      cantidad: venta.cantidad,
+      precio_unitario: venta.precio_unitario,
+      abonado: venta.abonado,
+    })
+  }
+
+  async function guardarEdicion(e) {
+    e.preventDefault()
+    if (!formEdit.cliente_id || Number(formEdit.cantidad) <= 0) return
+
+    const cantidadEd = Number(formEdit.cantidad)
+    const precioEd = Number(formEdit.precio_unitario)
+    const abonadoEd = Number(formEdit.abonado)
+    const totalEd = cantidadEd * precioEd
+    const estadoEd = estadoVenta(totalEd, abonadoEd)
+
+    const { error } = await supabase
+      .from('ventas')
+      .update({
+        cliente_id: formEdit.cliente_id,
+        fecha: formEdit.fecha,
+        cantidad: cantidadEd,
+        precio_unitario: precioEd,
+        abonado: abonadoEd,
+        estado: estadoEd,
+      })
+      .eq('id', modalEditar.id)
+
+    if (!error) {
+      setModalEditar(null)
+      setFormEdit(null)
+      cargar()
+    } else {
+      alert('Error al actualizar la venta: ' + error.message)
+    }
+  }
+
+  async function eliminarVenta(venta) {
+    if (
+      !confirm(
+        `¿Eliminar la venta de ${venta.clientes?.nombre || 'este cliente'} del ${venta.fecha}? Esta acción no se puede deshacer y también borrará los abonos asociados.`
+      )
+    )
+      return
+    const { error } = await supabase.from('ventas').delete().eq('id', venta.id)
+    if (!error) cargar()
+    else alert('Error al eliminar: ' + error.message)
   }
 
   const ventasFiltradas = filtroCliente
@@ -91,19 +146,12 @@ export default function Ventas() {
         <form onSubmit={guardarVenta} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="label-field">Cliente</label>
-            <select
-              required
-              className="input-field"
+            <ClienteBuscador
+              clientes={clientes}
               value={form.cliente_id}
-              onChange={(e) => setForm({ ...form, cliente_id: e.target.value })}
-            >
-              <option value="">Selecciona un cliente</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(id) => setForm({ ...form, cliente_id: id })}
+              placeholder="Buscar cliente…"
+            />
           </div>
           <div>
             <label className="label-field">Fecha</label>
@@ -180,20 +228,17 @@ export default function Ventas() {
       </div>
 
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
           <h2 className="font-bold text-gray-900">Historial de ventas</h2>
-          <select
-            className="input-field max-w-xs"
-            value={filtroCliente}
-            onChange={(e) => setFiltroCliente(e.target.value)}
-          >
-            <option value="">Todos los clientes</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
+          <div className="w-full max-w-xs">
+            <ClienteBuscador
+              clientes={clientes}
+              value={filtroCliente}
+              onChange={setFiltroCliente}
+              allowEmpty
+              placeholder="Filtrar por cliente…"
+            />
+          </div>
         </div>
 
         {loading ? (
@@ -212,6 +257,7 @@ export default function Ventas() {
                   <th className="py-2 pr-4">Abonado</th>
                   <th className="py-2 pr-4">Saldo</th>
                   <th className="py-2 pr-4">Estado</th>
+                  <th className="py-2 pr-4"></th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +282,16 @@ export default function Ventas() {
                         {v.estado}
                       </span>
                     </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => abrirEditar(v)} className="text-gray-400 hover:text-mordisco">
+                          <Pencil size={16} />
+                        </button>
+                        <button onClick={() => eliminarVenta(v)} className="text-gray-400 hover:text-red-500">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -243,6 +299,94 @@ export default function Ventas() {
           </div>
         )}
       </div>
+
+      {modalEditar && formEdit && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
+          <div className="card w-full max-w-md relative">
+            <button
+              onClick={() => {
+                setModalEditar(null)
+                setFormEdit(null)
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
+            >
+              <X size={18} />
+            </button>
+            <h2 className="font-bold text-lg text-gray-900 mb-4">Editar venta</h2>
+            <form onSubmit={guardarEdicion} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="label-field">Cliente</label>
+                <ClienteBuscador
+                  clientes={clientes}
+                  value={formEdit.cliente_id}
+                  onChange={(id) => setFormEdit({ ...formEdit, cliente_id: id })}
+                />
+              </div>
+              <div>
+                <label className="label-field">Fecha</label>
+                <input
+                  type="date"
+                  required
+                  className="input-field"
+                  value={formEdit.fecha}
+                  onChange={(e) => setFormEdit({ ...formEdit, fecha: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label-field">Cantidad</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  className="input-field"
+                  value={formEdit.cantidad}
+                  onChange={(e) => setFormEdit({ ...formEdit, cantidad: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label-field">Precio unitario</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  className="input-field"
+                  value={formEdit.precio_unitario}
+                  onChange={(e) => setFormEdit({ ...formEdit, precio_unitario: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label-field">Abonado</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="input-field"
+                  value={formEdit.abonado}
+                  onChange={(e) => setFormEdit({ ...formEdit, abonado: e.target.value })}
+                />
+              </div>
+
+              <div className="sm:col-span-2 bg-beige rounded-xl px-4 py-3 text-sm text-gray-600">
+                Nuevo total:{' '}
+                <span className="font-bold text-gray-900">
+                  {formatCOP(Number(formEdit.cantidad || 0) * Number(formEdit.precio_unitario || 0))}
+                </span>
+                {' · '}
+                Nuevo saldo:{' '}
+                <span className="font-bold text-gray-900">
+                  {formatCOP(
+                    Number(formEdit.cantidad || 0) * Number(formEdit.precio_unitario || 0) -
+                      Number(formEdit.abonado || 0)
+                  )}
+                </span>
+              </div>
+
+              <button type="submit" className="btn-primary sm:col-span-2 w-full">
+                Guardar cambios
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

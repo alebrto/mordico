@@ -70,6 +70,8 @@ export default function CuentasPorCobrar() {
             <thead>
               <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-100">
                 <th className="py-2 pr-4">Cliente</th>
+                <th className="py-2 pr-4">Fecha del pedido</th>
+                <th className="py-2 pr-4">Empanadas</th>
                 <th className="py-2 pr-4">Total</th>
                 <th className="py-2 pr-4">Abonado</th>
                 <th className="py-2 pr-4">Saldo</th>
@@ -84,6 +86,8 @@ export default function CuentasPorCobrar() {
                 return (
                   <tr key={v.id} className="border-b border-gray-50 last:border-0">
                     <td className="py-3 pr-4 font-medium text-gray-800">{v.clientes?.nombre || '—'}</td>
+                    <td className="py-3 pr-4 text-gray-500">{v.fecha}</td>
+                    <td className="py-3 pr-4">{v.cantidad}</td>
                     <td className="py-3 pr-4">{formatCOP(v.total)}</td>
                     <td className="py-3 pr-4">{formatCOP(v.abonado)}</td>
                     <td className="py-3 pr-4 font-semibold text-red-500">{formatCOP(v.saldo)}</td>
