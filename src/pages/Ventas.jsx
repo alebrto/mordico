@@ -52,99 +52,88 @@ export default function Ventas() {
   const totalCalculado = cantidad * precio
   const abonoCalculado = form.registrarAbono ? Number(form.valorAbonado) || 0 : 0
 
-  async function guardarVenta(e) {
-    e.preventDefault()
-    if (!form.cliente_id || cantidad <= 0) return
-    setGuardando(true)
+async function guardarVenta(e) {
+  e.preventDefault()
 
-    const { data: userData } = await supabase.auth.getUser()
-    const estado = estadoVenta(totalCalculado, abonoCalculado)
+  if (!form.cliente_id || cantidad <= 0) return
 
-    const payload = {
-  user_id: userData.user.id,
-  cliente_id: form.cliente_id,
-  fecha: form.fecha,
-  cantidad,
-  precio_unitario: precio,
-  total: totalCalculado,
-  saldo: totalCalculado - abonoCalculado,
-  abonado: abonoCalculado,
-  estado,
+  setGuardando(true)
+
+  const { data: userData } = await supabase.auth.getUser()
+
+  const estado = estadoVenta(totalCalculado, abonoCalculado)
+
+  const payload = {
+    user_id: userData.user.id,
+    cliente_id: form.cliente_id,
+    fecha: form.fecha,
+    cantidad,
+    precio_unitario: precio,
+    total: totalCalculado,
+    abonado: abonoCalculado,
+    saldo: totalCalculado - abonoCalculado,
+    estado,
+  }
+
+  console.log("Payload enviado:", payload)
+
+  const { error } = await supabase
+    .from("ventas")
+    .insert([payload])
+
+  setGuardando(false)
+
+  if (error) {
+    console.error(error)
+    alert("Error al guardar la venta: " + error.message)
+    return
+  }
+
+  setForm({
+    ...FORM_VACIO,
+    fecha: todayISO(),
+  })
+
+  cargar()
 }
 
-console.log(payload)
+async function guardarEdicion(e) {
+  e.preventDefault()
 
-const { error } = await supabase
-  .from('ventas')
-  .insert(payload)
-const { error } = await supabase.from('ventas').insert({
-  user_id: userData.user.id,
-  cliente_id: form.cliente_id,
-  fecha: form.fecha,
-  cantidad,
-  precio_unitario: precio,
+  if (!formEdit.cliente_id || Number(formEdit.cantidad) <= 0) return
 
-  total: totalCalculado,
-  saldo: totalCalculado - abonoCalculado,
+  const cantidadEd = Number(formEdit.cantidad)
+  const precioEd = Number(formEdit.precio_unitario)
+  const abonadoEd = Number(formEdit.abonado)
 
-  abonado: abonoCalculado,
-  estado,
-})
+  const totalEd = cantidadEd * precioEd
+  const saldoEd = totalEd - abonadoEd
+  const estadoEd = estadoVenta(totalEd, abonadoEd)
 
-    setGuardando(false)
-    if (!error) {
-      setForm({ ...FORM_VACIO, fecha: todayISO() })
-      cargar()
-    } else {
-      alert('Error al guardar la venta: ' + error.message)
-    }
-  }
-
-  function abrirEditar(venta) {
-    setModalEditar(venta)
-    setFormEdit({
-      cliente_id: venta.cliente_id || '',
-      fecha: venta.fecha,
-      cantidad: venta.cantidad,
-      precio_unitario: venta.precio_unitario,
-      abonado: venta.abonado,
+  const { error } = await supabase
+    .from("ventas")
+    .update({
+      cliente_id: formEdit.cliente_id,
+      fecha: formEdit.fecha,
+      cantidad: cantidadEd,
+      precio_unitario: precioEd,
+      total: totalEd,
+      abonado: abonadoEd,
+      saldo: saldoEd,
+      estado: estadoEd,
     })
+    .eq("id", modalEditar.id)
+
+  if (error) {
+    alert("Error al actualizar la venta: " + error.message)
+    return
   }
 
-  async function guardarEdicion(e) {
-    e.preventDefault()
-    if (!formEdit.cliente_id || Number(formEdit.cantidad) <= 0) return
+  setModalEditar(null)
+  setFormEdit(null)
 
-    const cantidadEd = Number(formEdit.cantidad)
-    const precioEd = Number(formEdit.precio_unitario)
-    const abonadoEd = Number(formEdit.abonado)
-    const totalEd = cantidadEd * precioEd
-    const estadoEd = estadoVenta(totalEd, abonadoEd)
-
-    const { error } = await supabase
-      .from('ventas')
-.update({
-  cliente_id: formEdit.cliente_id,
-  fecha: formEdit.fecha,
-  cantidad: cantidadEd,
-  precio_unitario: precioEd,
-
-  total: totalEd,
-  saldo: totalEd - abonadoEd,
-
-  abonado: abonadoEd,
-  estado: estadoEd,
-})
-      .eq('id', modalEditar.id)
-
-    if (!error) {
-      setModalEditar(null)
-      setFormEdit(null)
-      cargar()
-    } else {
-      alert('Error al actualizar la venta: ' + error.message)
-    }
-  }
+  cargar()
+}
 
   async function eliminarVenta(venta) {
     if (
@@ -296,13 +285,12 @@ const { error } = await supabase.from('ventas').insert({
                     <td className="py-3 pr-4 font-semibold">{formatCOP(v.saldo)}</td>
                     <td className="py-3 pr-4">
                       <span
-                        className={`badge ${
-                          v.estado === 'Pagado'
+                        className={`badge ${v.estado === 'Pagado'
                             ? 'bg-green-100 text-green-700'
                             : v.estado === 'Abono parcial'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
                       >
                         {v.estado}
                       </span>
@@ -400,7 +388,7 @@ const { error } = await supabase.from('ventas').insert({
                 <span className="font-bold text-gray-900">
                   {formatCOP(
                     Number(formEdit.cantidad || 0) * Number(formEdit.precio_unitario || 0) -
-                      Number(formEdit.abonado || 0)
+                    Number(formEdit.abonado || 0)
                   )}
                 </span>
               </div>
