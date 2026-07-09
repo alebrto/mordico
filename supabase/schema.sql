@@ -4,6 +4,16 @@
 -- =========================================================
 -- Ejecutar en el SQL Editor de tu proyecto Supabase.
 -- Requiere la extensión pgcrypto para gen_random_uuid().
+--
+-- ⚠️ MIGRACIÓN (solo si tu tabla "ventas" YA EXISTE de una versión
+-- anterior de este proyecto, donde "total" y "saldo" eran columnas
+-- GENERATED): ejecuta estas 2 líneas UNA SOLA VEZ antes del resto de este
+-- archivo. Si tu tabla es nueva o ya no son columnas generadas, ignóralas
+-- (no hacen daño, Postgres solo da un aviso si no aplica):
+--
+--   alter table public.ventas alter column total drop expression;
+--   alter table public.ventas alter column saldo drop expression;
+--
 create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------
@@ -21,6 +31,14 @@ create table if not exists public.clientes (
 );
 
 -- VENTAS
+-- NOTA: "total", "saldo" y "estado" NO son columnas generadas (GENERATED
+-- ALWAYS AS). Postgres prohíbe insertar/actualizar un valor explícito en una
+-- columna generada, y el frontend necesita poder enviar estos campos (o no
+-- enviarlos) sin que la operación falle. En su lugar, se calculan siempre
+-- mediante el trigger "calcular_totales_venta" (ver más abajo), que se
+-- dispara ANTES de cada INSERT/UPDATE y sobreescribe estos tres campos a
+-- partir de cantidad, precio_unitario y abonado. Así quedan siempre
+-- correctos y sincronizados, sin importar qué envíe el frontend.
 create table if not exists public.ventas (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -28,9 +46,9 @@ create table if not exists public.ventas (
   fecha date not null default current_date,
   cantidad integer not null check (cantidad > 0),
   precio_unitario numeric not null default 2600,
-  total numeric generated always as (cantidad * precio_unitario) stored,
+  total numeric not null default 0,
   abonado numeric not null default 0,
-  saldo numeric generated always as (cantidad * precio_unitario - abonado) stored,
+  saldo numeric not null default 0,
   estado text not null default 'Debe todo' check (estado in ('Pagado','Abono parcial','Debe todo')),
   created_at timestamptz not null default now()
 );
@@ -75,8 +93,37 @@ create index if not exists idx_abonos_venta on public.abonos(venta_id);
 create index if not exists idx_gastos_fecha on public.gastos(fecha);
 
 -- =========================================================
--- FUNCIÓN + TRIGGER: al insertar un abono, actualizar la venta
--- (abonado, saldo generado automáticamente, estado)
+-- FUNCIÓN + TRIGGER: recalcular total, saldo y estado de una venta
+-- ANTES de insertarla o actualizarla, sin importar qué haya enviado
+-- el frontend. Esto es lo que hace que el color del estado (rojo/
+-- amarillo/verde) siempre sea correcto en cualquier vista.
+-- =========================================================
+create or replace function public.calcular_totales_venta()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.total := new.cantidad * new.precio_unitario;
+  new.saldo := new.total - new.abonado;
+  new.estado := case
+    when new.saldo <= 0 then 'Pagado'
+    when new.abonado > 0 then 'Abono parcial'
+    else 'Debe todo'
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_calcular_totales_venta on public.ventas;
+create trigger trg_calcular_totales_venta
+before insert or update on public.ventas
+for each row execute function public.calcular_totales_venta();
+
+-- =========================================================
+-- FUNCIÓN + TRIGGER: al insertar un abono, sumarlo al campo
+-- "abonado" de la venta. El trigger de arriba (BEFORE UPDATE) se
+-- encarga de recalcular saldo/estado automáticamente al hacer este
+-- UPDATE, así que aquí solo hace falta sumar el abono.
 -- =========================================================
 create or replace function public.actualizar_venta_tras_abono()
 returns trigger
@@ -85,12 +132,7 @@ security definer
 as $$
 begin
   update public.ventas
-  set abonado = abonado + new.valor,
-      estado = case
-        when (abonado + new.valor) >= total then 'Pagado'
-        when (abonado + new.valor) > 0 then 'Abono parcial'
-        else 'Debe todo'
-      end
+  set abonado = abonado + new.valor
   where id = new.venta_id;
   return new;
 end;

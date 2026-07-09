@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { PARAMETROS, formatCOP, estadoVenta } from '../lib/financials'
+import { PARAMETROS, formatCOP, estadoVenta, localDateISO as todayISO } from '../lib/financials'
 import ClienteBuscador from '../components/ClienteBuscador'
 import { Pencil, Trash2, X } from 'lucide-react'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 const FORM_VACIO = {
   cliente_id: '',
@@ -61,21 +57,19 @@ async function guardarVenta(e) {
 
   const { data: userData } = await supabase.auth.getUser()
 
-  const estado = estadoVenta(totalCalculado, abonoCalculado)
-
+  // IMPORTANTE: no enviamos "total", "saldo" ni "estado" aquí. Esos valores
+  // los calcula automáticamente la base de datos (ver supabase/schema.sql,
+  // trigger "calcular_totales_venta") a partir de cantidad, precio_unitario
+  // y abonado. Enviarlos manualmente puede chocar con columnas calculadas
+  // y causar errores al guardar, o desincronizarse del valor real.
   const payload = {
     user_id: userData.user.id,
     cliente_id: form.cliente_id,
     fecha: form.fecha,
     cantidad,
     precio_unitario: precio,
-    total: totalCalculado,
     abonado: abonoCalculado,
-    saldo: totalCalculado - abonoCalculado,
-    estado,
   }
-
-  console.log("Payload enviado:", payload)
 
   const { error } = await supabase
     .from("ventas")
@@ -106,10 +100,8 @@ async function guardarEdicion(e) {
   const precioEd = Number(formEdit.precio_unitario)
   const abonadoEd = Number(formEdit.abonado)
 
-  const totalEd = cantidadEd * precioEd
-  const saldoEd = totalEd - abonadoEd
-  const estadoEd = estadoVenta(totalEd, abonadoEd)
-
+  // Igual que en guardarVenta: total/saldo/estado los recalcula la base de
+  // datos automáticamente a partir de cantidad, precio_unitario y abonado.
   const { error } = await supabase
     .from("ventas")
     .update({
@@ -117,10 +109,7 @@ async function guardarEdicion(e) {
       fecha: formEdit.fecha,
       cantidad: cantidadEd,
       precio_unitario: precioEd,
-      total: totalEd,
       abonado: abonadoEd,
-      saldo: saldoEd,
-      estado: estadoEd,
     })
     .eq("id", modalEditar.id)
 
@@ -134,6 +123,17 @@ async function guardarEdicion(e) {
 
   cargar()
 }
+
+  function abrirEditar(venta) {
+    setModalEditar(venta)
+    setFormEdit({
+      cliente_id: venta.cliente_id,
+      fecha: venta.fecha,
+      cantidad: venta.cantidad,
+      precio_unitario: venta.precio_unitario,
+      abonado: venta.abonado,
+    })
+  }
 
   async function eliminarVenta(venta) {
     if (

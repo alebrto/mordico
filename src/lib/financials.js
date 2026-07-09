@@ -74,11 +74,52 @@ export function formatCOP(valor) {
   }).format(valor || 0)
 }
 
+// ---------------------------------------------------------------------
+// Utilidades de fecha "seguras" para zona horaria.
+//
+// PROBLEMA: `new Date().toISOString().slice(0, 10)` devuelve la fecha en
+// UTC, no en la hora local del dispositivo. En Colombia (UTC-5), a partir
+// de las 7:00 p.m. hora local ya es "mañana" en UTC, así que ese método
+// guarda/consulta la fecha equivocada (un día adelantado). Estas funciones
+// siempre usan los componentes LOCALES de la fecha (getFullYear/getMonth/
+// getDate), nunca toISOString(), para evitar ese desfase.
+// ---------------------------------------------------------------------
+
+// Fecha local en formato 'YYYY-MM-DD' (por defecto, la fecha/hora actual).
+export function localDateISO(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// Convierte un string 'YYYY-MM-DD' (como los que vienen de Supabase) a un
+// objeto Date a medianoche en hora LOCAL. Si se usa `new Date('YYYY-MM-DD')`
+// directamente, JS lo interpreta como medianoche UTC, lo que puede mostrar
+// un día distinto según la zona horaria del usuario.
+export function parseISODateLocal(fechaISO) {
+  const [y, m, d] = fechaISO.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Primer día del mes (local) en formato 'YYYY-MM-DD'.
+export function primerDiaDelMesISO(date = new Date()) {
+  return localDateISO(new Date(date.getFullYear(), date.getMonth(), 1))
+}
+
+// Lunes de la semana actual (semana de lunes a domingo), en hora local.
+export function lunesDeEstaSemanaISO(date = new Date()) {
+  const dia = date.getDay() // 0 = domingo, 1 = lunes, ...
+  const diff = dia === 0 ? -6 : 1 - dia
+  const lunes = new Date(date.getFullYear(), date.getMonth(), date.getDate() + diff)
+  return localDateISO(lunes)
+}
+
 export function diasDeMora(fechaVenta) {
-  const hoy = new Date()
-  const fecha = new Date(fechaVenta)
+  const hoy = parseISODateLocal(localDateISO())
+  const fecha = parseISODateLocal(fechaVenta)
   const diffMs = hoy - fecha
-  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)))
 }
 
 export function nivelMorosidad(dias) {

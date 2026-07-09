@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { formatCOP, diasDeMora, nivelMorosidad } from '../lib/financials'
-import { MessageCircle, PlusCircle, X } from 'lucide-react'
+import { MessageCircle, PlusCircle, X, Search } from 'lucide-react'
 
 export default function CuentasPorCobrar() {
   const [ventas, setVentas] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalAbono, setModalAbono] = useState(null)
   const [valorAbono, setValorAbono] = useState('')
+  const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
     cargar()
@@ -15,14 +16,27 @@ export default function CuentasPorCobrar() {
 
   async function cargar() {
     setLoading(true)
+    // Ordenado por fecha (más antigua primero): así se ven primero las
+    // cuentas con más días de mora, que suelen ser las más urgentes.
     const { data } = await supabase
       .from('ventas')
       .select('*, clientes(nombre, telefono)')
       .gt('saldo', 0)
-      .order('saldo', { ascending: false })
+      .order('fecha', { ascending: true })
+      .order('created_at', { ascending: true })
     setVentas(data || [])
     setLoading(false)
   }
+
+  const ventasFiltradas = ventas.filter((v) => {
+    const texto = busqueda.trim().toLowerCase()
+    if (!texto) return true
+    return (
+      (v.clientes?.nombre || '').toLowerCase().includes(texto) ||
+      (v.clientes?.telefono || '').toLowerCase().includes(texto) ||
+      (v.fecha || '').includes(texto)
+    )
+  })
 
   function abrirModalAbono(venta) {
     setModalAbono(venta)
@@ -58,13 +72,26 @@ export default function CuentasPorCobrar() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-extrabold text-gray-900">Cuentas por cobrar</h1>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl font-extrabold text-gray-900">Cuentas por cobrar</h1>
+        <div className="relative w-full max-w-xs">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            className="input-field pl-9"
+            placeholder="Buscar por cliente, teléfono o fecha…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+        </div>
+      </div>
 
       <div className="card overflow-x-auto">
         {loading ? (
           <p className="text-sm text-gray-400">Cargando…</p>
         ) : ventas.length === 0 ? (
           <p className="text-sm text-gray-400">No hay cuentas pendientes por cobrar. 🎉</p>
+        ) : ventasFiltradas.length === 0 ? (
+          <p className="text-sm text-gray-400">No se encontraron resultados para "{busqueda}".</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -80,7 +107,7 @@ export default function CuentasPorCobrar() {
               </tr>
             </thead>
             <tbody>
-              {ventas.map((v) => {
+              {ventasFiltradas.map((v) => {
                 const dias = diasDeMora(v.fecha)
                 const mora = nivelMorosidad(dias)
                 return (

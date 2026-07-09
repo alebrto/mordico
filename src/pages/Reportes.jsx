@@ -1,30 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP, num } from '../lib/financials'
+import {
+  formatCOP,
+  num,
+  localDateISO as todayISO,
+  primerDiaDelMesISO as firstOfMonthISO,
+  lunesDeEstaSemanaISO,
+} from '../lib/financials'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { ImagePlus, X } from 'lucide-react'
 
 const LOGO_STORAGE_KEY = 'mordisco_logo_pdf_base64'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function firstOfMonthISO() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
-
-// Lunes de la semana actual (semana de lunes a domingo)
-function lunesDeEstaSemanaISO() {
-  const d = new Date()
-  const dia = d.getDay() // 0 = domingo, 1 = lunes, ...
-  const diff = dia === 0 ? -6 : 1 - dia
-  const lunes = new Date(d)
-  lunes.setDate(d.getDate() + diff)
-  return lunes.toISOString().slice(0, 10)
-}
 
 export default function Reportes() {
   const [desde, setDesde] = useState(firstOfMonthISO())

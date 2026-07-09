@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP, num } from '../lib/financials'
+import { formatCOP, num, localDateISO as todayISO } from '../lib/financials'
 import { Pencil, Trash2, X } from 'lucide-react'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export default function Gastos() {
   const [gastos, setGastos] = useState([])

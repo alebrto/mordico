@@ -7,6 +7,7 @@ import {
   puntoDeEquilibrio,
   margenBrutoPorcentaje,
   proyeccionMensual,
+  primerDiaDelMesISO,
 } from '../lib/financials'
 import {
   ResponsiveContainer,
@@ -26,10 +27,7 @@ import AsistenteIA from '../components/AsistenteIA'
 
 const COLORES = ['#C46F2B', '#E0A876', '#8B5A2B', '#D4A276', '#A85A20']
 
-function firstOfMonthISO() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
+const firstOfMonthISO = primerDiaDelMesISO
 
 export default function DashboardFinanciero() {
   const [ventas, setVentas] = useState([])
