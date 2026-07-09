@@ -60,6 +60,23 @@ export default function Ventas() {
     const { data: userData } = await supabase.auth.getUser()
     const estado = estadoVenta(totalCalculado, abonoCalculado)
 
+    const payload = {
+  user_id: userData.user.id,
+  cliente_id: form.cliente_id,
+  fecha: form.fecha,
+  cantidad,
+  precio_unitario: precio,
+  total: totalCalculado,
+  saldo: totalCalculado - abonoCalculado,
+  abonado: abonoCalculado,
+  estado,
+}
+
+console.log(payload)
+
+const { error } = await supabase
+  .from('ventas')
+  .insert(payload)
 const { error } = await supabase.from('ventas').insert({
   user_id: userData.user.id,
   cliente_id: form.cliente_id,
