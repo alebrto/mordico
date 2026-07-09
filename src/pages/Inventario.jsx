@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP, RECETA_EMPANADA } from '../lib/financials'
+import { formatCOP, num, RECETA_EMPANADA } from '../lib/financials'
 import { AlertTriangle, Pencil, Trash2, X } from 'lucide-react'
 
 export default function Inventario() {
@@ -70,7 +70,7 @@ export default function Inventario() {
     cargar()
   }
 
-  const alertas = insumos.filter((i) => i.cantidad_actual <= i.cantidad_minima)
+  const alertas = insumos.filter((i) => num(i.cantidad_actual) <= num(i.cantidad_minima))
 
   return (
     <div className="flex flex-col gap-6">
@@ -119,7 +119,7 @@ export default function Inventario() {
             </thead>
             <tbody>
               {insumos.map((i) => {
-                const bajo = i.cantidad_actual <= i.cantidad_minima
+                const bajo = num(i.cantidad_actual) <= num(i.cantidad_minima)
                 const consumo = RECETA_EMPANADA[i.nombre.toLowerCase()] ?? '—'
                 return (
                   <tr key={i.id} className="border-b border-gray-50 last:border-0">

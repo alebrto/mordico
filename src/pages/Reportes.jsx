@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP } from '../lib/financials'
+import { formatCOP, num } from '../lib/financials'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { ImagePlus, X } from 'lucide-react'
@@ -72,20 +72,20 @@ export default function Reportes() {
     const v = ventas || []
     const g = gastos || []
 
-    const totalEmpanadas = v.reduce((a, x) => a + x.cantidad, 0)
-    const totalFacturado = v.reduce((a, x) => a + x.total, 0)
-    const totalCobrado = v.reduce((a, x) => a + x.abonado, 0)
+    const totalEmpanadas = v.reduce((a, x) => a + num(x.cantidad), 0)
+    const totalFacturado = v.reduce((a, x) => a + num(x.total), 0)
+    const totalCobrado = v.reduce((a, x) => a + num(x.abonado), 0)
     const porCobrar = totalFacturado - totalCobrado
-    const gastosFijos = g.filter((x) => x.tipo === 'Fijo').reduce((a, x) => a + x.valor, 0)
-    const gastosVariables = g.filter((x) => x.tipo === 'Variable').reduce((a, x) => a + x.valor, 0)
+    const gastosFijos = g.filter((x) => x.tipo === 'Fijo').reduce((a, x) => a + num(x.valor), 0)
+    const gastosVariables = g.filter((x) => x.tipo === 'Variable').reduce((a, x) => a + num(x.valor), 0)
     const gananciaReal = totalCobrado - gastosFijos - gastosVariables
 
     const ventasPorCliente = {}
     v.forEach((x) => {
       const nombre = x.clientes?.nombre || 'Sin cliente'
       if (!ventasPorCliente[nombre]) ventasPorCliente[nombre] = { empanadas: 0, total: 0 }
-      ventasPorCliente[nombre].empanadas += x.cantidad
-      ventasPorCliente[nombre].total += x.total
+      ventasPorCliente[nombre].empanadas += num(x.cantidad)
+      ventasPorCliente[nombre].total += num(x.total)
     })
 
     setReporte({

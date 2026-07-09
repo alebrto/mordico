@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { PARAMETROS, formatCOP } from '../lib/financials'
+import { PARAMETROS, formatCOP, num } from '../lib/financials'
 import { AlertTriangle, Wallet, Receipt } from 'lucide-react'
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function firstOfMonthISO() {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+}
+
 export default function Resumen() {
   const [ventasHoy, setVentasHoy] = useState([])
   const [gastosHoy, setGastosHoy] = useState([])
-  const [clientesDeuda, setClientesDeuda] = useState([])
   const [porCobrarTotal, setPorCobrarTotal] = useState(0)
+  const [pagadoMes, setPagadoMes] = useState(0)
+  const [gastosMes, setGastosMes] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -21,6 +27,7 @@ export default function Resumen() {
   async function cargarDatos() {
     setLoading(true)
     const hoy = todayISO()
+    const inicioMes = firstOfMonthISO()
 
     const { data: ventas } = await supabase
       .from('ventas')
@@ -33,33 +40,46 @@ export default function Resumen() {
       .select('*')
       .eq('fecha', hoy)
 
-    const { data: deudores } = await supabase
-      .from('ventas')
-      .select('*, clientes(nombre)')
-      .gt('saldo', 0)
-      .order('saldo', { ascending: false })
-      .limit(5)
-
     // Cartera total: TODO lo que hay pendiente por cobrar en la historia
     // completa, no solo lo de hoy.
     const { data: todasLasDeudas } = await supabase.from('ventas').select('saldo').gt('saldo', 0)
 
+    // Para "dinero disponible en caja" del MES (no solo del día):
+    const { data: ventasMes } = await supabase.from('ventas').select('abonado').gte('fecha', inicioMes)
+    const { data: gastosDelMes } = await supabase.from('gastos').select('valor').gte('fecha', inicioMes)
+
     setVentasHoy(ventas || [])
     setGastosHoy(gastos || [])
-    setClientesDeuda(deudores || [])
-    setPorCobrarTotal((todasLasDeudas || []).reduce((acc, v) => acc + v.saldo, 0))
+    setPorCobrarTotal((todasLasDeudas || []).reduce((acc, v) => acc + num(v.saldo), 0))
+    setPagadoMes((ventasMes || []).reduce((acc, v) => acc + num(v.abonado), 0))
+    setGastosMes((gastosDelMes || []).reduce((acc, g) => acc + num(g.valor), 0))
     setLoading(false)
   }
 
-  const empanadasVendidasHoy = ventasHoy.reduce((acc, v) => acc + v.cantidad, 0)
-  const ingresosHoy = ventasHoy.reduce((acc, v) => acc + v.total, 0)
-  const pagadoHoy = ventasHoy.reduce((acc, v) => acc + v.abonado, 0)
+  const empanadasVendidasHoy = ventasHoy.reduce((acc, v) => acc + num(v.cantidad), 0)
+  const ingresosHoy = ventasHoy.reduce((acc, v) => acc + num(v.total), 0)
+  const pagadoHoy = ventasHoy.reduce((acc, v) => acc + num(v.abonado), 0)
   const porCobrarHoy = ingresosHoy - pagadoHoy
-  const gastosDelDia = gastosHoy.reduce((acc, g) => acc + g.valor, 0)
+  const gastosDelDia = gastosHoy.reduce((acc, g) => acc + num(g.valor), 0)
   const gananciaEstimadaHoy = empanadasVendidasHoy * PARAMETROS.margenUnitario - gastosDelDia
   const porcentajeCobrado = ingresosHoy > 0 ? Math.round((pagadoHoy / ingresosHoy) * 100) : 0
   const metaProgreso = Math.min(100, Math.round((empanadasVendidasHoy / PARAMETROS.metaDiariaEmpanadas) * 100))
-  const dineroEnCaja = pagadoHoy - gastosDelDia
+
+  // Dinero disponible en caja: acumulado del MES (pagado por clientes menos
+  // gastos pagados), no solo del día.
+  const dineroEnCaja = pagadoMes - gastosMes
+
+  // Clientes con deuda: solo de las ventas de HOY (agrupado por cliente,
+  // porque un mismo cliente puede tener varios pedidos hoy).
+  const deudaPorClienteHoy = {}
+  ventasHoy.forEach((v) => {
+    if (num(v.saldo) <= 0) return
+    const nombre = v.clientes?.nombre || 'Cliente'
+    deudaPorClienteHoy[nombre] = (deudaPorClienteHoy[nombre] || 0) + num(v.saldo)
+  })
+  const clientesDeudaHoy = Object.entries(deudaPorClienteHoy)
+    .map(([nombre, saldo]) => ({ nombre, saldo }))
+    .sort((a, b) => b.saldo - a.saldo)
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,7 +148,7 @@ export default function Resumen() {
           <p className={`text-3xl font-extrabold ${dineroEnCaja >= 0 ? 'text-gray-900' : 'text-red-500'}`}>
             {formatCOP(dineroEnCaja)}
           </p>
-          <p className="text-xs text-gray-400">Pagado hoy − gastos del día</p>
+          <p className="text-xs text-gray-400">Acumulado del mes: pagado por clientes − gastos pagados</p>
         </div>
       </div>
 
@@ -196,18 +216,18 @@ export default function Resumen() {
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle size={18} className="text-mordisco" />
-          <h2 className="font-bold text-gray-900">Clientes con deuda</h2>
+          <h2 className="font-bold text-gray-900">Clientes con deuda de hoy</h2>
         </div>
         {loading ? (
           <p className="text-sm text-gray-400">Cargando…</p>
-        ) : clientesDeuda.length === 0 ? (
-          <p className="text-sm text-gray-400">No hay clientes con saldo pendiente.</p>
+        ) : clientesDeudaHoy.length === 0 ? (
+          <p className="text-sm text-gray-400">Nadie quedó debiendo en las ventas de hoy. 🎉</p>
         ) : (
           <div className="flex flex-col divide-y divide-gray-100">
-            {clientesDeuda.map((v) => (
-              <div key={v.id} className="flex items-center justify-between py-3">
-                <p className="font-medium text-gray-800">{v.clientes?.nombre || 'Cliente'}</p>
-                <p className="font-bold text-red-500">{formatCOP(v.saldo)}</p>
+            {clientesDeudaHoy.map((c) => (
+              <div key={c.nombre} className="flex items-center justify-between py-3">
+                <p className="font-medium text-gray-800">{c.nombre}</p>
+                <p className="font-bold text-red-500">{formatCOP(c.saldo)}</p>
               </div>
             ))}
           </div>

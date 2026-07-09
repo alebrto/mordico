@@ -1,3 +1,14 @@
+// Supabase/Postgres devuelve las columnas `numeric` como TEXTO (string) para
+// no perder precisión, no como número de JS. Si se suman directamente con
+// `+`, JavaScript las concatena como texto en vez de sumarlas. Usa esta
+// función siempre que hagas operaciones aritméticas sobre valores que vienen
+// de la base de datos (valor, total, abonado, saldo, costo_unitario, etc).
+export function num(v) {
+  if (typeof v === 'number') return v
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
 // Parámetros fijos del negocio (editables aquí o, idealmente, movidos a una
 // tabla `parametros` en Supabase para que se puedan editar desde la UI).
 export const PARAMETROS = {

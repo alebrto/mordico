@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP } from '../lib/financials'
+import { formatCOP, num } from '../lib/financials'
 import { Pencil, Trash2, Plus, X } from 'lucide-react'
 
 export default function Clientes() {
@@ -27,11 +27,11 @@ export default function Clientes() {
         resumen[v.cliente_id] = { empanadas: 0, deuda: 0, totalHistorico: 0, ultimaCompra: null, totalPagos: 0, totalVentas: 0 }
       }
       const r = resumen[v.cliente_id]
-      r.empanadas += v.cantidad
-      r.deuda += v.saldo
-      r.totalHistorico += v.total
-      r.totalPagos += v.abonado
-      r.totalVentas += v.total
+      r.empanadas += num(v.cantidad)
+      r.deuda += num(v.saldo)
+      r.totalHistorico += num(v.total)
+      r.totalPagos += num(v.abonado)
+      r.totalVentas += num(v.total)
       if (!r.ultimaCompra || v.fecha > r.ultimaCompra) r.ultimaCompra = v.fecha
     })
 

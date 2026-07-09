@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatCOP } from '../lib/financials'
+import { formatCOP, num } from '../lib/financials'
 import { Pencil, Trash2, X } from 'lucide-react'
 
 function todayISO() {
@@ -58,8 +58,8 @@ export default function Gastos() {
 
   const mesActual = todayISO().slice(0, 7)
   const gastosDelMes = gastos.filter((g) => g.fecha.startsWith(mesActual))
-  const totalFijos = gastosDelMes.filter((g) => g.tipo === 'Fijo').reduce((a, g) => a + g.valor, 0)
-  const totalVariables = gastosDelMes.filter((g) => g.tipo === 'Variable').reduce((a, g) => a + g.valor, 0)
+  const totalFijos = gastosDelMes.filter((g) => g.tipo === 'Fijo').reduce((a, g) => a + num(g.valor), 0)
+  const totalVariables = gastosDelMes.filter((g) => g.tipo === 'Variable').reduce((a, g) => a + num(g.valor), 0)
 
   return (
     <div className="flex flex-col gap-6">

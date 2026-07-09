@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import {
   PARAMETROS,
   formatCOP,
+  num,
   puntoDeEquilibrio,
   margenBrutoPorcentaje,
   proyeccionMensual,
@@ -49,22 +50,22 @@ export default function DashboardFinanciero() {
     setLoading(false)
   }
 
-  const totalEmpanadasMes = ventas.reduce((a, v) => a + v.cantidad, 0)
-  const totalCobradoMes = ventas.reduce((a, v) => a + v.abonado, 0)
-  const carteraAcumulada = ventas.reduce((a, v) => a + v.saldo, 0)
+  const totalEmpanadasMes = ventas.reduce((a, v) => a + num(v.cantidad), 0)
+  const totalCobradoMes = ventas.reduce((a, v) => a + num(v.abonado), 0)
+  const carteraAcumulada = ventas.reduce((a, v) => a + num(v.saldo), 0)
   const diasTranscurridos = new Date().getDate()
   const promedioDiario = diasTranscurridos > 0 ? totalEmpanadasMes / diasTranscurridos : 0
 
   // Gastos REALES del mes, tomados de lo que el usuario registró en la vista Gastos.
-  const gastosFijosMes = gastos.filter((g) => g.tipo === 'Fijo').reduce((a, g) => a + g.valor, 0)
-  const gastosVariablesMes = gastos.filter((g) => g.tipo === 'Variable').reduce((a, g) => a + g.valor, 0)
+  const gastosFijosMes = gastos.filter((g) => g.tipo === 'Fijo').reduce((a, g) => a + num(g.valor), 0)
+  const gastosVariablesMes = gastos.filter((g) => g.tipo === 'Variable').reduce((a, g) => a + num(g.valor), 0)
   const gastosTotalesMes = gastosFijosMes + gastosVariablesMes
 
   const liquidez = totalCobradoMes - gastosTotalesMes
 
   const empanadasPorDia = {}
   ventas.forEach((v) => {
-    empanadasPorDia[v.fecha] = (empanadasPorDia[v.fecha] || 0) + v.cantidad
+    empanadasPorDia[v.fecha] = (empanadasPorDia[v.fecha] || 0) + num(v.cantidad)
   })
   const dataEmpanadasPorDia = Object.entries(empanadasPorDia)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -74,7 +75,7 @@ export default function DashboardFinanciero() {
   ventas.forEach((v) => {
     const fecha = new Date(v.fecha)
     const semana = `S${Math.ceil(fecha.getDate() / 7)}`
-    ingresosPorSemana[semana] = (ingresosPorSemana[semana] || 0) + v.total
+    ingresosPorSemana[semana] = (ingresosPorSemana[semana] || 0) + num(v.total)
   })
   const dataIngresosPorSemana = Object.entries(ingresosPorSemana).map(([semana, total]) => ({
     semana,
@@ -83,7 +84,7 @@ export default function DashboardFinanciero() {
 
   const gastosPorCategoria = {}
   gastos.forEach((g) => {
-    gastosPorCategoria[g.concepto] = (gastosPorCategoria[g.concepto] || 0) + g.valor
+    gastosPorCategoria[g.concepto] = (gastosPorCategoria[g.concepto] || 0) + num(g.valor)
   })
   const dataGastosPorCategoria = Object.entries(gastosPorCategoria).map(([name, value]) => ({ name, value }))
 
