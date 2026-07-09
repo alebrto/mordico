@@ -60,15 +60,19 @@ export default function Ventas() {
     const { data: userData } = await supabase.auth.getUser()
     const estado = estadoVenta(totalCalculado, abonoCalculado)
 
-    const { error } = await supabase.from('ventas').insert({
-      user_id: userData.user.id,
-      cliente_id: form.cliente_id,
-      fecha: form.fecha,
-      cantidad,
-      precio_unitario: precio,
-      abonado: abonoCalculado,
-      estado,
-    })
+const { error } = await supabase.from('ventas').insert({
+  user_id: userData.user.id,
+  cliente_id: form.cliente_id,
+  fecha: form.fecha,
+  cantidad,
+  precio_unitario: precio,
+
+  total: totalCalculado,
+  saldo: totalCalculado - abonoCalculado,
+
+  abonado: abonoCalculado,
+  estado,
+})
 
     setGuardando(false)
     if (!error) {
@@ -102,14 +106,18 @@ export default function Ventas() {
 
     const { error } = await supabase
       .from('ventas')
-      .update({
-        cliente_id: formEdit.cliente_id,
-        fecha: formEdit.fecha,
-        cantidad: cantidadEd,
-        precio_unitario: precioEd,
-        abonado: abonadoEd,
-        estado: estadoEd,
-      })
+.update({
+  cliente_id: formEdit.cliente_id,
+  fecha: formEdit.fecha,
+  cantidad: cantidadEd,
+  precio_unitario: precioEd,
+
+  total: totalEd,
+  saldo: totalEd - abonadoEd,
+
+  abonado: abonadoEd,
+  estado: estadoEd,
+})
       .eq('id', modalEditar.id)
 
     if (!error) {
